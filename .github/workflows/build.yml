@@ -9,13 +9,13 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   build:
     runs-on: windows-latest
-    
-    # 删除这行！不需要 job-level outputs
-    # outputs:
-    #   version: ${{ steps.get_version.outputs.version }}
     
     steps:
     - uses: actions/checkout@v4
@@ -26,26 +26,17 @@ jobs:
         
     - name: Extract version from code
       id: get_version
-      shell: python
+      shell: pwsh
       run: |
-        import re
-        import os
-        
-        with open('PicStamp.py', 'r', encoding='utf-8') as f:
-            content = f.read()
-        match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', content)
-        
-        if match:
-            version = match.group(1)
-            print(f"Found version: {version}")
-        else:
-            print("未找到 APP_VERSION，使用默认版本 v0.0.0")
-            version = "v0.0.0"
-        
-        # 使用环境变量文件（新语法，推荐）
-        github_output = os.environ.get('GITHUB_OUTPUT')
-        with open(github_output, 'a', encoding='utf-8') as f:
-            f.write(f"version={version}\n")
+        $content = Get-Content -Path 'PicStamp.py' -Raw
+        if ($content -match 'APP_VERSION\s*=\s*["'']([^"'']+)["'']') {
+            $version = $matches[1]
+            Write-Host "Found version: $version"
+        } else {
+            $version = "v0.0.0"
+            Write-Host "未找到 APP_VERSION，使用默认版本"
+        }
+        "version=$version" >> $env:GITHUB_OUTPUT
         
     - name: Install dependencies
       run: |
@@ -76,5 +67,4 @@ jobs:
         draft: false
         prerelease: false
         allowUpdates: true
-        generateReleaseNotes: true
         token: ${{ secrets.GITHUB_TOKEN }}
