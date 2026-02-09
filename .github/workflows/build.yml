@@ -70,5 +70,6 @@ jobs:
         body: "自动构建版本 ${{ steps.get_version.outputs.version }}"
         draft: false
         prerelease: false
+        target_commitish: ${{ github.sha }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
