@@ -7,27 +7,33 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QCheckBox, QScrollArea, QFrame, QSplitter, QMessageBox, QColorDialog,
                             QDoubleSpinBox, QProgressBar, QStatusBar, QToolBar, QGridLayout,
                             QSizePolicy, QSpacerItem, QTabWidget, QTextEdit)
-from PyQt6.QtCore import Qt, QSize, QPoint, QRect, pyqtSignal, QThread
-from PyQt6.QtGui import QPixmap, QImage, QColor, QFont, QFontDatabase, QPainter, QPen, QAction
+from PyQt6.QtCore import Qt, QSize, QPoint, QRect, pyqtSignal, QThread, QIODevice
+from PyQt6.QtGui import QPixmap, QImage, QColor, QFont, QFontDatabase, QPainter, QPen, QTextCursor
 from PIL import Image, ImageDraw, ImageFont, ImageQt
 import math
 
-APP_VERSION = "v1.0.0" 
+APP_VERSION = "v1.1.0" 
 
-# 全局stderr过滤器，隐藏MMKV日志
-class StderrFilter(io.TextIOWrapper):
+# 更可靠的stderr过滤器
+class StderrFilter:
     def __init__(self, original):
         self.original = original
         
     def write(self, message):
-        if isinstance(message, bytes):
-            message = message.decode('utf-8', errors='ignore')
-        # 过滤掉MMKV和libpng警告
-        if not any(x in str(message) for x in ['MMKV', 'libpng', 'mmap', 'MemoryFile', 'engine_0']):
+        try:
+            msg_str = str(message)
+            # 过滤掉MMKV和libpng日志
+            if any(x in msg_str for x in ['MMKV', 'libpng', 'mmap', 'MemoryFile', 'engine_0', 'isDiskOfMMAPFileCorrupted']):
+                return
             self.original.write(message)
+        except:
+            pass
             
     def flush(self):
-        self.original.flush()
+        try:
+            self.original.flush()
+        except:
+            pass
 
 # 应用过滤器
 sys.stderr = StderrFilter(sys.stderr)
@@ -140,11 +146,9 @@ class WatermarkWorker(QThread):
             if not text:
                 return img
             
-            # 关键：使用设置的字号，默认50
             font_size = settings.get('font_size', 50)
             font_family = settings.get('font_family', 'SimSun')
             
-            # 强制使用支持中文的字体
             font_obj = self.get_font(font_family, font_size, text)
             
             overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
@@ -207,8 +211,6 @@ class WatermarkWorker(QThread):
         return img
     
     def get_font(self, font_family, font_size, text):
-        """获取字体，优先使用支持中文的字体"""
-        # 中文字体候选列表
         chinese_fonts = [
             'SimSun', 'simsun', '宋体',
             'Microsoft YaHei', 'microsoft yahei', '微软雅黑',
@@ -225,34 +227,27 @@ class WatermarkWorker(QThread):
             'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei'
         ]
         
-        # 检查是否需要中文字体（包含非ASCII字符）
         has_chinese = any(ord(char) > 127 for char in text)
-        
-        # 如果指定字体是中文字体，直接使用
         is_chinese_font = any(cf.lower() in font_family.lower() for cf in chinese_fonts)
         
         if has_chinese or is_chinese_font:
-            # 尝试使用指定字体
             if is_chinese_font:
                 try:
                     return ImageFont.truetype(font_family, font_size)
                 except:
                     pass
             
-            # 尝试所有中文字体
             for font_name in chinese_fonts:
                 try:
                     return ImageFont.truetype(font_name, font_size)
                 except:
                     continue
         
-        # 尝试使用指定字体（非中文）
         try:
             return ImageFont.truetype(font_family, font_size)
         except:
             pass
         
-        # 最后尝试常见字体
         fallback_fonts = ['Arial', 'Times New Roman', 'Helvetica', 'Verdana']
         for font_name in fallback_fonts:
             try:
@@ -260,7 +255,6 @@ class WatermarkWorker(QThread):
             except:
                 continue
         
-        # 使用默认字体
         return ImageFont.load_default()
     
     def parse_color(self, color_str):
@@ -527,7 +521,7 @@ class WatermarkApp(QMainWindow):
         font_layout.addWidget(QLabel("字号:"))
         self.size_spin = QSpinBox()
         self.size_spin.setRange(1, 99999)
-        self.size_spin.setValue(50)  # 默认50
+        self.size_spin.setValue(50)
         self.size_spin.valueChanged.connect(self.update_preview)
         font_layout.addWidget(self.size_spin)
         
@@ -780,7 +774,6 @@ class WatermarkApp(QMainWindow):
         layout.addWidget(group)
         
     def load_fonts(self):
-        # 中文字体放在前面
         chinese_fonts = ['SimSun', 'Microsoft YaHei', 'SimHei', 'NSimSun', 
                         'FangSong', 'KaiTi', 'LiSu', 'YouYuan']
         english_fonts = ['Times New Roman', 'Arial', 'Helvetica', 'Courier New', 
@@ -794,7 +787,6 @@ class WatermarkApp(QMainWindow):
         except:
             self.font_combo.addItems(chinese_fonts + english_fonts)
         
-        # 默认选择宋体
         self.font_combo.setCurrentText('SimSun')
         
     def on_rotation_changed(self, value):
@@ -937,8 +929,6 @@ class WatermarkApp(QMainWindow):
         self.update_preview()
         
     def get_font(self, font_family, font_size, text):
-        """获取字体，优先使用支持中文的字体"""
-        # 中文字体候选列表（包含多种可能的名称）
         chinese_fonts = [
             'SimSun', 'simsun', '宋体',
             'Microsoft YaHei', 'microsoft yahei', '微软雅黑',
@@ -955,34 +945,27 @@ class WatermarkApp(QMainWindow):
             'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei'
         ]
         
-        # 检查是否需要中文字体（包含非ASCII字符）
         has_chinese = any(ord(char) > 127 for char in text)
-        
-        # 如果指定字体是中文字体，直接使用
         is_chinese_font = any(cf.lower() in font_family.lower() for cf in chinese_fonts)
         
         if has_chinese or is_chinese_font:
-            # 尝试使用指定字体
             if is_chinese_font:
                 try:
                     return ImageFont.truetype(font_family, font_size)
                 except:
                     pass
             
-            # 尝试所有中文字体
             for font_name in chinese_fonts:
                 try:
                     return ImageFont.truetype(font_name, font_size)
                 except:
                     continue
         
-        # 尝试使用指定字体（非中文）
         try:
             return ImageFont.truetype(font_family, font_size)
         except:
             pass
         
-        # 最后尝试常见字体
         fallback_fonts = ['Arial', 'Times New Roman', 'Helvetica', 'Verdana']
         for font_name in fallback_fonts:
             try:
@@ -990,7 +973,6 @@ class WatermarkApp(QMainWindow):
             except:
                 continue
         
-        # 使用默认字体
         return ImageFont.load_default()
         
     def update_preview(self):
@@ -1059,13 +1041,11 @@ class WatermarkApp(QMainWindow):
             if not text:
                 return img
             
-            # 关键：使用设置的字号，默认50
             original_font_size = self.size_spin.value()
             font_size = max(1, int(original_font_size * self.preview_scale))
             
             font_family = self.font_combo.currentText()
             
-            # 使用改进的字体获取方法
             font_obj = self.get_font(font_family, font_size, text)
             
             overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
@@ -1198,12 +1178,11 @@ class WatermarkApp(QMainWindow):
             if reply != QMessageBox.StandardButton.Yes:
                 return
         
-        # 关键：确保使用当前UI中的设置值
         settings = {
             'watermark_type': 'text' if self.text_radio.isChecked() else 'image',
             'text': self.text_edit.text(),
             'font_family': self.font_combo.currentText(),
-            'font_size': self.size_spin.value(),  # 确保使用当前字号值
+            'font_size': self.size_spin.value(),
             'color': self.current_color,
             'opacity': self.opacity_slider.value(),
             'rotation': self.rot_spin.value(),
