@@ -1,0 +1,69 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10.11'
+        
+    - name: Extract version from code
+      id: get_version
+      shell: python
+      run: |
+        import re
+        with open('PicStamp.py', 'r', encoding='utf-8') as f:
+            content = f.read()
+        match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', content)
+        if match:
+            version = match.group(1)
+            print(f"Found version: {version}")
+            print(f"version={version}" >> $env:GITHUB_OUTPUT)
+        else:
+            print("未找到 APP_VERSION，使用默认版本 v0.0.0")
+            print("version=v0.0.0" >> $env:GITHUB_OUTPUT)
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller pillow pyqt6
+        
+    - name: Build EXE
+      run: pyinstaller --onefile --windowed --name "PicStamp" PicStamp.py
+          
+    - name: Rename EXE with version
+      run: |
+        cd dist
+        ren PicStamp.exe "PicStamp-${{ steps.get_version.outputs.version }}.exe"
+          
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PicStamp-${{ steps.get_version.outputs.version }}
+        path: dist/PicStamp-${{ steps.get_version.outputs.version }}.exe
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/PicStamp-${{ steps.get_version.outputs.version }}.exe
+        generate_release_notes: true
+        name: Release ${{ steps.get_version.outputs.version }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
