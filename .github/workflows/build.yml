@@ -13,8 +13,9 @@ jobs:
   build:
     runs-on: windows-latest
     
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
+    # 删除这行！不需要 job-level outputs
+    # outputs:
+    #   version: ${{ steps.get_version.outputs.version }}
     
     steps:
     - uses: actions/checkout@v4
@@ -28,6 +29,8 @@ jobs:
       shell: python
       run: |
         import re
+        import os
+        
         with open('PicStamp.py', 'r', encoding='utf-8') as f:
             content = f.read()
         match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', content)
@@ -39,7 +42,9 @@ jobs:
             print("未找到 APP_VERSION，使用默认版本 v0.0.0")
             version = "v0.0.0"
         
-        with open(r'$env:GITHUB_OUTPUT', 'a') as f:
+        # 使用环境变量文件（新语法，推荐）
+        github_output = os.environ.get('GITHUB_OUTPUT')
+        with open(github_output, 'a', encoding='utf-8') as f:
             f.write(f"version={version}\n")
         
     - name: Install dependencies
