@@ -62,14 +62,14 @@ jobs:
         path: dist/PicStamp-${{ steps.get_version.outputs.version }}.exe
         
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: ncipollo/release-action@v1
       with:
-        files: dist/PicStamp-${{ steps.get_version.outputs.version }}.exe
-        tag_name: ${{ steps.get_version.outputs.version }}
+        artifacts: dist/PicStamp-${{ steps.get_version.outputs.version }}.exe
+        tag: ${{ steps.get_version.outputs.version }}
         name: Release ${{ steps.get_version.outputs.version }}
         body: "自动构建版本 ${{ steps.get_version.outputs.version }}"
         draft: false
         prerelease: false
-        target_commitish: ${{ github.sha }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        allowUpdates: true
+        generateReleaseNotes: true
+        token: ${{ secrets.GITHUB_TOKEN }}
