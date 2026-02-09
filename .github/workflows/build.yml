@@ -31,13 +31,16 @@ jobs:
         with open('PicStamp.py', 'r', encoding='utf-8') as f:
             content = f.read()
         match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', content)
+        
         if match:
             version = match.group(1)
             print(f"Found version: {version}")
-            print(f"version={version}" >> $env:GITHUB_OUTPUT)
         else:
             print("未找到 APP_VERSION，使用默认版本 v0.0.0")
-            print("version=v0.0.0" >> $env:GITHUB_OUTPUT)
+            version = "v0.0.0"
+        
+        with open(r'$env:GITHUB_OUTPUT', 'a') as f:
+            f.write(f"version={version}\n")
         
     - name: Install dependencies
       run: |
